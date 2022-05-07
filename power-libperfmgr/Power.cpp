@@ -28,11 +28,50 @@
 #include <android-base/strings.h>
 #include <cutils/properties.h>
 
+#include <linux/input.h>
+
 #include <utils/Log.h>
 #include <utils/Trace.h>
 
 #include "PowerHintSession.h"
 #include "PowerSessionManager.h"
+
+namespace {
+int open_ts_input() {
+    int fd = -1;
+    DIR* dir = opendir("/dev/input");
+
+    if (dir != NULL) {
+        struct dirent* ent;
+
+        while ((ent = readdir(dir)) != NULL) {
+            if (ent->d_type == DT_CHR) {
+                char absolute_path[PATH_MAX] = {0};
+                char name[80] = {0};
+
+                strcpy(absolute_path, "/dev/input/");
+                strcat(absolute_path, ent->d_name);
+
+                fd = open(absolute_path, O_RDWR);
+                if (ioctl(fd, EVIOCGNAME(sizeof(name) - 1), &name) > 0) {
+                    if (strcmp(name, "atmel_mxt_ts") == 0 || strcmp(name, "fts_ts") == 0 ||
+                            strcmp(name, "fts") == 0 || strcmp(name, "ft5x46") == 0 ||
+                            strcmp(name, "synaptics_dsx") == 0 ||
+                            strcmp(name, "NVTCapacitiveTouchScreen") == 0)
+                        break;
+                }
+
+                close(fd);
+                fd = -1;
+            }
+        }
+
+        closedir(dir);
+    }
+
+    return fd;
+}
+}  // anonymous namespace
 
 namespace aidl {
 namespace google {
@@ -40,6 +79,9 @@ namespace hardware {
 namespace power {
 namespace impl {
 namespace pixel {
+
+static constexpr int kInputEventWakeupModeOff = 4;
+static constexpr int kInputEventWakeupModeOn = 5;
 
 using ::aidl::google::hardware::power::impl::pixel::PowerHintSession;
 
@@ -98,11 +140,21 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
     }
 #endif
     switch (type) {
-#ifdef TAP_TO_WAKE_NODE
-        case Mode::DOUBLE_TAP_TO_WAKE:
-            ::android::base::WriteStringToFile(enabled ? "1" : "0", TAP_TO_WAKE_NODE, true);
+        case Mode::DOUBLE_TAP_TO_WAKE: {
+            int fd = open_ts_input();
+            if (fd == -1) {
+                LOG(WARNING)
+                    << "DT2W won't work because no supported touchscreen input devices were found";
+                break;
+            }
+            struct input_event ev;
+            ev.type = EV_SYN;
+            ev.code = SYN_CONFIG;
+            ev.value = enabled ? kInputEventWakeupModeOn : kInputEventWakeupModeOff;
+            write(fd, &ev, sizeof(ev));
+            close(fd);
             break;
-#endif
+        }
         case Mode::SUSTAINED_PERFORMANCE:
             if (enabled) {
                 mHintManager->DoHint("SUSTAINED_PERFORMANCE");
@@ -114,10 +166,6 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
                 break;
             }
             [[fallthrough]];
-#ifndef TAP_TO_WAKE_NODE
-        case Mode::DOUBLE_TAP_TO_WAKE:
-            [[fallthrough]];
-#endif
         case Mode::FIXED_PERFORMANCE:
             [[fallthrough]];
         case Mode::EXPENSIVE_RENDERING:
@@ -150,11 +198,9 @@ ndk::ScopedAStatus Power::isModeSupported(Mode type, bool *_aidl_return) {
 #endif
 
     bool supported = mHintManager->IsHintSupported(toString(type));
-#ifdef TAP_TO_WAKE_NODE
     if (type == Mode::DOUBLE_TAP_TO_WAKE) {
         supported = true;
     }
-#endif
     LOG(INFO) << "Power mode " << toString(type) << " isModeSupported: " << supported;
     *_aidl_return = supported;
     return ndk::ScopedAStatus::ok();
