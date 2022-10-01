@@ -9,6 +9,9 @@ $(call inherit-product, device/xiaomi/sirius/sirius.mk)
 # Inherit some common Lineage stuff.
 $(call inherit-product, vendor/nyanpasu/build/target/nekomimi.mk)
 
+# Boot Animation
+TARGET_BOOT_ANIMATION_RES := 1080
+
 # Device identifier. This must come after all inclusions.
 PRODUCT_NAME := nyanpasu_sirius
 PRODUCT_DEVICE := sirius
