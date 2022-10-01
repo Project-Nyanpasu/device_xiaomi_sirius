@@ -99,7 +99,6 @@ persist.vendor.cne.feature=1
 
 # Display post-processing
 ro.vendor.display.cabl=2
-persist.sys.sf.native_mode=2
 vendor.display.qdcm.disable_factory_mode=1
 vendor.display.qdcm.mode_combine=1
 
