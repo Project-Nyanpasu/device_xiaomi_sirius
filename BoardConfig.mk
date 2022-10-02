@@ -46,6 +46,9 @@ TARGET_KERNEL_SOURCE := kernel/xiaomi/sirius
 TARGET_KERNEL_CONFIG := sirius_defconfig
 TARGET_KERNEL_VERSION := 4.9
 
+# TODO: Fix CAF ROM SELinux, When finish remove it
+BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
+
 # Platform
 TARGET_BOARD_PLATFORM := sdm710
 
